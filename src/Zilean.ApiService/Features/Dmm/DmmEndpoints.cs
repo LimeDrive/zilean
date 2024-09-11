@@ -1,4 +1,9 @@
 using Zilean.Database.Services;
+using Zilean.Shared.Features.Dmm;
+using System.Linq;
+using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Http;
+using Microsoft.Extensions.Logging;
 
 namespace Zilean.ApiService.Features.Dmm;
 
@@ -26,10 +31,10 @@ public static class DmmEndpoints
     private static RouteGroupBuilder Dmm(this RouteGroupBuilder group)
     {
         group.MapPost(Search, PerformSearch)
-            .Produces<TorrentInfo[]>();
+            .Produces<ClearTorrentInfo[]>();
 
         group.MapGet(Filtered, PerformFilteredSearch)
-            .Produces<TorrentInfo[]>();
+            .Produces<ClearTorrentInfo[]>();
 
         group.MapGet(Ingest, PerformOnDemandScrape);
 
@@ -68,34 +73,34 @@ public static class DmmEndpoints
         logger.LogWarning("Failed to acquire lock for on-demand scrape.");
     }
 
-    private static async Task<Ok<TorrentInfo[]>> PerformSearch(HttpContext context, ITorrentInfoService torrentInfoService, ZileanConfiguration configuration, ILogger<DmmUnfilteredInstance> logger, [FromBody] DmmQueryRequest queryRequest)
+    private static async Task<Ok<ClearTorrentInfo[]>> PerformSearch(HttpContext context, ITorrentInfoService torrentInfoService, ZileanConfiguration configuration, ILogger<DmmUnfilteredInstance> logger, [FromBody] DmmQueryRequest queryRequest)
     {
         try
         {
             if (string.IsNullOrEmpty(queryRequest.QueryText))
             {
-                return TypedResults.Ok(Array.Empty<TorrentInfo>());
+                return TypedResults.Ok(Array.Empty<ClearTorrentInfo>());
             }
 
             logger.LogInformation("Performing unfiltered search for {QueryText}", queryRequest.QueryText);
 
             var results = await torrentInfoService.SearchForTorrentInfoByOnlyTitle(queryRequest.QueryText);
+            var clearResults = results.Select(ClearTorrentInfo.FromTorrentInfo).ToArray();
 
-            logger.LogInformation("Unfiltered search for {QueryText} returned {Count} results", queryRequest.QueryText, results.Length);
+            logger.LogInformation("Unfiltered search for {QueryText} returned {Count} results", queryRequest.QueryText, clearResults.Length);
 
-            return results.Length == 0
-                ? TypedResults.Ok(Array.Empty<TorrentInfo>())
-                : TypedResults.Ok(results);
+            return clearResults.Length == 0
+                ? TypedResults.Ok(Array.Empty<ClearTorrentInfo>())
+                : TypedResults.Ok(clearResults);
         }
         catch
         {
-            return TypedResults.Ok(Array.Empty<TorrentInfo>());
+            return TypedResults.Ok(Array.Empty<ClearTorrentInfo>());
         }
     }
 
-    private static async Task<Ok<TorrentInfo[]>> PerformFilteredSearch(HttpContext context, ITorrentInfoService torrentInfoService, ZileanConfiguration configuration, ILogger<DmmFilteredInstance> logger, [AsParameters] DmmFilteredRequest request)
+    private static async Task<Ok<ClearTorrentInfo[]>> PerformFilteredSearch(HttpContext context, ITorrentInfoService torrentInfoService, ZileanConfiguration configuration, ILogger<DmmFilteredInstance> logger, [AsParameters] DmmFilteredRequest request)
     {
-
         try
         {
             logger.LogInformation("Performing filtered search for {@Request}", request);
@@ -111,15 +116,17 @@ public static class DmmEndpoints
                 ImdbId = request.ImdbId
             });
 
-            logger.LogInformation("Filtered search for {QueryText} returned {Count} results", request.Query, results.Length);
+            var clearResults = results.Select(ClearTorrentInfo.FromTorrentInfo).ToArray();
 
-            return results.Length == 0
-                ? TypedResults.Ok(Array.Empty<TorrentInfo>())
-                : TypedResults.Ok(results);
+            logger.LogInformation("Filtered search for {QueryText} returned {Count} results", request.Query, clearResults.Length);
+
+            return clearResults.Length == 0
+                ? TypedResults.Ok(Array.Empty<ClearTorrentInfo>())
+                : TypedResults.Ok(clearResults);
         }
         catch
         {
-            return TypedResults.Ok(Array.Empty<TorrentInfo>());
+            return TypedResults.Ok(Array.Empty<ClearTorrentInfo>());
         }
     }
 
